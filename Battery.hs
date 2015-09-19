@@ -30,26 +30,15 @@ import System.Console.ANSI (Color(..))
 import System.Directory (getDirectoryContents)
 import System.FilePath ((</>))
 
-colorize :: Color -> String -> String
-colorize c = (ANSI.setSGRCode [ANSI.SetColor ANSI.Foreground ANSI.Vivid c] ++)
-
-rightTriangle, up, down, energySymbol :: Char
-rightTriangle = '▶'
-up = '↑'
-down = '↓'
-energySymbol = 'ϟ'
-
-powerDir ::  FilePath
-powerDir = "/sys/class/power_supply/"
-
-batteryDir :: IO FilePath
-batteryDir =
-  do entries <- getDirectoryContents powerDir
-     let (d:_) = filter ("BAT" `isPrefixOf`) entries
-     return (powerDir </> d)
-
-barsTotal :: Int
-barsTotal = 10
+main :: IO ()
+main =
+  do dir <- batteryDir
+     process <- chargingProcessSymbol
+     currentCharge <- fmap read (readFile (dir </> "charge_now"))
+     fullCharge <- fmap read (readFile (dir </> "charge_full"))
+     let bar = batteryBar (currentCharge / fullCharge)
+     putStrLn (process ++ " " ++ bar)
+     ANSI.setSGR [ANSI.Reset]
 
 chargingProcessSymbol :: IO String
 chargingProcessSymbol =
@@ -63,8 +52,23 @@ chargingProcessSymbol =
        _ ->
          return (colorize Blue [up])
 
-warningChargeLevel :: Fractional a => a
-warningChargeLevel = 0.1
+batteryDir :: IO FilePath
+batteryDir =
+  do entries <- getDirectoryContents powerDir
+     let (d:_) = filter ("BAT" `isPrefixOf`) entries
+     return (powerDir </> d)
+
+powerDir ::  FilePath
+powerDir = "/sys/class/power_supply/"
+
+colorize :: Color -> String -> String
+colorize c = (ANSI.setSGRCode [ANSI.SetColor ANSI.Foreground ANSI.Vivid c] ++)
+
+rightTriangle, up, down, energySymbol :: Char
+rightTriangle = '▶'
+up = '↑'
+down = '↓'
+energySymbol = 'ϟ'
 
 batteryBar :: Double -> String
 batteryBar p = greenPart ++ otherPart
@@ -74,12 +78,8 @@ batteryBar p = greenPart ++ otherPart
         rest = barsTotal - greens
         otherColor = if p < warningChargeLevel then Red else Yellow
 
-main :: IO ()
-main =
-  do dir <- batteryDir
-     process <- chargingProcessSymbol
-     currentCharge <- fmap read (readFile (dir </> "charge_now"))
-     fullCharge <- fmap read (readFile (dir </> "charge_full"))
-     let bar = batteryBar (currentCharge / fullCharge)
-     putStrLn (process ++ " " ++ bar)
-     ANSI.setSGR [ANSI.Reset]
+barsTotal :: Int
+barsTotal = 10
+
+warningChargeLevel :: Fractional a => a
+warningChargeLevel = 0.1
