@@ -25,6 +25,7 @@
 module Main where
 
 import Data.List (isPrefixOf)
+import Data.Maybe (listToMaybe)
 import qualified System.Console.ANSI as ANSI
 import System.Console.ANSI (Color(..))
 import System.Directory (getDirectoryContents)
@@ -32,34 +33,33 @@ import System.FilePath ((</>))
 
 main :: IO ()
 main =
-  do dir <- batteryDir
-     process <- chargingProcessSymbol
-     currentCharge <- fmap read (readFile (dir </> "charge_now"))
-     fullCharge <- fmap read (readFile (dir </> "charge_full"))
+  do (Just dir) <- batteryDir
+     let applyToFileContent fun fn = fmap fun (readFile (dir </> fn))
+     process <- applyToFileContent chargingProcessSymbol "status"
+     currentCharge <- applyToFileContent read "charge_now"
+     fullCharge <- applyToFileContent read "charge_full"
      let bar = batteryBar (currentCharge / fullCharge)
      putStrLn (process ++ " " ++ bar)
      ANSI.setSGR [ANSI.Reset]
 
-chargingProcessSymbol :: IO String
-chargingProcessSymbol =
-  do d <- batteryDir
-     process <- readFile (d </> "status")
-     case process of
-       "Full\n" ->
-         return (colorize Green [energySymbol])
-       "Discharging\n" ->
-         return (colorize Red [down])
-       _ ->
-         return (colorize Blue [up])
-
-batteryDir :: IO FilePath
+batteryDir :: IO (Maybe FilePath)
 batteryDir =
   do entries <- getDirectoryContents powerDir
-     let (d:_) = filter ("BAT" `isPrefixOf`) entries
-     return (powerDir </> d)
+     let ds = filter ("BAT" `isPrefixOf`) entries
+     return (fmap (powerDir </>) (listToMaybe ds))
 
 powerDir ::  FilePath
 powerDir = "/sys/class/power_supply/"
+
+chargingProcessSymbol :: String -> String
+chargingProcessSymbol process =
+   case process of
+     "Full\n" ->
+       colorize Green [energySymbol]
+     "Discharging\n" ->
+       colorize Red [down]
+     _ ->
+       colorize Blue [up]
 
 colorize :: Color -> String -> String
 colorize c = (ANSI.setSGRCode [ANSI.SetColor ANSI.Foreground ANSI.Vivid c] ++)
