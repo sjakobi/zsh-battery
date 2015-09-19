@@ -55,14 +55,14 @@ chargingProcessSymbol :: String -> String
 chargingProcessSymbol process =
    case process of
      "Full\n" ->
-       colorize Green [energySymbol]
+       dye Green [energySymbol]
      "Discharging\n" ->
-       colorize Red [down]
+       dye Red [down]
      _ ->
-       colorize Blue [up]
+       dye Blue [up]
 
-colorize :: Color -> String -> String
-colorize c = (ANSI.setSGRCode [ANSI.SetColor ANSI.Foreground ANSI.Vivid c] ++)
+dye :: Color -> String -> String
+dye c = (ANSI.setSGRCode [ANSI.SetColor ANSI.Foreground ANSI.Vivid c] ++)
 
 rightTriangle, up, down, energySymbol :: Char
 rightTriangle = '▶'
@@ -72,9 +72,9 @@ energySymbol = 'ϟ'
 
 batteryBar :: Double -> String
 batteryBar p = greenPart ++ otherPart
-  where greenPart = colorize Green (replicate greens rightTriangle)
+  where greenPart = dye Green (replicate greens rightTriangle)
         greens = truncate (p * fromIntegral barsTotal)
-        otherPart = colorize otherColor (replicate rest rightTriangle)
+        otherPart = dye otherColor (replicate rest rightTriangle)
         rest = barsTotal - greens
         otherColor = if p < warningChargeLevel then Red else Yellow
 
