@@ -22,68 +22,64 @@
  -  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  -  OTHER DEALINGS IN THE SOFTWARE.
  -}
-module Main (main) where
+module Main where
 
-import Control.Monad.Error
-import System.Console.ANSI
-import System.IO
-import Symbols
-import Files
+import Data.List (isPrefixOf)
+import qualified System.Console.ANSI as ANSI
+import System.Console.ANSI (Color(..))
+import System.Directory (getDirectoryContents)
+import System.FilePath ((</>))
 
-setColor c = setSGR [SetColor Foreground Vivid c]
+colorize :: Color -> String -> String
+colorize c = (ANSI.setSGRCode [ANSI.SetColor ANSI.Foreground ANSI.Vivid c] ++)
 
-barstotal = 10
+rightTriangle, up, down, energySymbol :: Char
+rightTriangle = '▶'
+up = '↑'
+down = '↓'
+energySymbol = 'ϟ'
 
-charging' =
-  do setColor Blue
-     putChar up
-discharging' =
-  do setColor Red
-     putChar down
-full' =
-  do setColor Green
-     putChar koppa
+powerDir ::  FilePath
+powerDir = "/sys/class/power_supply/"
 
-charging :: String -> IO ()
-charging "Charging\n" = charging'
-charging "Full\n" = full'
-charging _	    = discharging'
+batteryDir :: IO FilePath
+batteryDir =
+  do entries <- getDirectoryContents powerDir
+     let (d:_) = filter ("BAT" `isPrefixOf`) entries
+     return (powerDir </> d)
 
-warning = 0.1 -- 10%
+barsTotal :: Int
+barsTotal = 10
 
-percent :: Double -> Double -> Double
-percent o n = n / o
+chargingProcessSymbol :: IO String
+chargingProcessSymbol =
+  do d <- batteryDir
+     process <- readFile (d </> "status")
+     case process of
+       "Full\n" ->
+         return (colorize Green [energySymbol])
+       "Discharging\n" ->
+         return (colorize Red [down])
+       _ ->
+         return (colorize Blue [up])
 
-warn :: Double -> Bool
-warn = (>) warning
+warningChargeLevel :: Fractional a => a
+warningChargeLevel = 0.1
 
-bar :: Double -> IO ()
-bar p =
-  do setColor Green
-     putStr (replicate greens barsymbol)
-     setColor yellow
-     putStr (replicate yellows barsymbol)
-  where greens = truncate (p * fromIntegral barstotal) :: Int
-        yellows = barstotal - greens :: Int
-        yellow = if warn p then Red else Yellow
-
-printBar =
-  do f <- fmap read $ readFileM =<< full
-     c <- fmap read $ readFileM =<< charge
-     return $ bar (percent f c)
+batteryBar :: Double -> String
+batteryBar p = greenPart ++ otherPart
+  where greenPart = colorize Green (replicate greens rightTriangle)
+        greens = truncate (p * fromIntegral barsTotal)
+        otherPart = colorize otherColor (replicate rest rightTriangle)
+        rest = barsTotal - greens
+        otherColor = if p < warningChargeLevel then Red else Yellow
 
 main :: IO ()
-main = do
-  fillLevel <- runErrorT $ readFileM =<< full
-  case fillLevel of
-    Right a ->
-      charging a
-    Left x ->
-      hPutStrLn stderr x
-  hFlush stdout
-  bar <- runErrorT printBar
-  case bar of
-    Right x ->
-      do x
-         putStrLn ""
-    Left x -> hPutStrLn stderr x
+main =
+  do dir <- batteryDir
+     process <- chargingProcessSymbol
+     currentCharge <- fmap read (readFile (dir </> "charge_now"))
+     fullCharge <- fmap read (readFile (dir </> "charge_full"))
+     let bar = batteryBar (currentCharge / fullCharge)
+     putStrLn (process ++ " " ++ bar)
+     ANSI.setSGR [ANSI.Reset]
